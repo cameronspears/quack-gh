@@ -11,12 +11,12 @@ use regex::Regex;
 
 /// Print an introductory message describing the program.
 fn print_intro() {
-    println!("🦆 Welcome to Quack!");
+    println!("🦆 Welcome to Quack! 🦆");
     println!("Making your GitHub life easier by:");
-    println!("  - Ensuring GitHub CLI is installed 🛠️");
-    println!("  - Authenticating you with GitHub 🔐");
-    println!("  - Initializing a GitHub repository 📦");
-    println!("  - Setting up a local git repository 🌐");
+    println!("\n  - Ensuring GitHub CLI is installed");
+    println!("  - Authenticating you with GitHub");
+    println!("  - Create a new GitHub repository");
+    println!("  - Linking the new repo to your local repo");
     println!("\nLet's get started!");
 }
 
@@ -39,7 +39,7 @@ fn run_command(command: &str, args: &[&str]) -> Result<String, String> {
 fn ensure_gh_installed() -> Result<(), String> {
     match Command::new("gh").arg("--version").output() {
         Ok(_) => {
-            info!("GitHub CLI is already installed. ✅");
+            info!("✅  GitHub CLI is already installed.");
             Ok(())
         }
         Err(_) => {
@@ -85,7 +85,7 @@ fn ensure_gh_installed() -> Result<(), String> {
 fn check_gh_authenticated() -> Result<(), String> {
     match run_command("gh", &["auth", "status"]) {
         Ok(_) => {
-            info!("You are already authenticated with GitHub. ✅");
+            info!("✅  You are already authenticated with GitHub.");
             Ok(())
         }
         Err(_) => {
@@ -130,7 +130,7 @@ fn get_repo_details() -> (String, String) {
     let mut repo_visibility = String::new();
 
     loop {
-        print!("New GitHub repo name?: ");
+        print!("\nNew repo name?: ");
         io::stdout().flush().unwrap();
         io::stdin().read_line(&mut repo_name).expect("Failed to read line");
         repo_name = repo_name.trim().to_string();
@@ -144,22 +144,22 @@ fn get_repo_details() -> (String, String) {
     }
 
     loop {
-        print!("Should the repository be public or private? Type 'p' for public, 'pr' for private [Default: public]: ");
+        print!("Make repo public? Y/n: ");
         io::stdout().flush().unwrap();
         io::stdin().read_line(&mut repo_visibility).expect("Failed to read line");
         repo_visibility = repo_visibility.trim().to_string();
 
-        // Default to "public" if nothing or just "p" is entered
-        if repo_visibility.is_empty() || repo_visibility == "p" {
+        // Default to "public" if nothing or just "Y" is entered
+        if repo_visibility.is_empty() || repo_visibility.to_lowercase() == "y" {
             repo_visibility = "public".to_string();
             break;
         }
-        // Accept "pr" or "private" for private repositories
-        else if repo_visibility == "private" || repo_visibility == "pr" {
+        // Accept "n" for private repositories
+        else if repo_visibility.to_lowercase() == "n" {
             repo_visibility = "private".to_string();
             break;
         } else {
-            warn!("Invalid option. Type 'p' for public or 'pr' for private.");
+            warn!("Invalid option. Type 'Y' for public or 'n' for private.");
             repo_visibility.clear();
         }
     }
@@ -186,13 +186,14 @@ fn create_github_repo(repo_name: &str, repo_visibility: &str) -> Result<String, 
 /// Initialize git and set remote URL.
 fn handle_git_remote(new_github_url: &str) -> Result<String, String> {
     // Prompt user about setting git remotes
-    print!("Do you want to set the git remotes for the repository? This will link the local repository with the remote GitHub repository. (y/n): ");
+    print!("Link local repo with new repo? (Y/n): ");
     io::stdout().flush().unwrap();
     let mut input = String::new();
     io::stdin().read_line(&mut input).expect("Failed to read line");
     let input = input.trim().to_lowercase();
 
-    if input == "y" || input == "yes" {
+    // Default to "yes" if input is empty
+    if input.is_empty() || input == "y" || input == "yes" {
         run_command("git", &["init"])?;
 
         match run_command("git", &["remote"]) {
