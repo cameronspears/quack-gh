@@ -8,7 +8,18 @@ use std::process::Command;
 
 use log::{error, info, warn};
 use regex::Regex;
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+
+/// Print an introductory message describing the program.
+fn print_intro() {
+    println!("🦆 Welcome to Quack!");
+    println!("Making your GitHub life easier by:");
+    println!("  - Ensuring GitHub CLI is installed 🛠️");
+    println!("  - Authenticating you with GitHub 🔐");
+    println!("  - Initializing a GitHub repository 📦");
+    println!("  - Setting up a local git repository 🌐");
+    println!("\nLet's get started!");
+}
+
 
 /// Run shell command and capture the output.
 fn run_command(command: &str, args: &[&str]) -> Result<String, String> {
@@ -24,17 +35,15 @@ fn run_command(command: &str, args: &[&str]) -> Result<String, String> {
     }
 }
 
-/// Ensures or installs Github CLI on Mac and Windows using brew and chocolatey, as well as a manual installer if needed
+/// Ensures or installs Github CLI.
 fn ensure_gh_installed() -> Result<(), String> {
     match Command::new("gh").arg("--version").output() {
         Ok(_) => {
-            info!("GitHub CLI is already installed.");
+            info!("GitHub CLI is already installed. ✅");
             Ok(())
         }
         Err(_) => {
-            // Inform the user why GitHub CLI is needed
             info!("The GitHub CLI is required for authentication, repository creation, and other GitHub operations.");
-
             print!("Do you want to install it? (y/n): ");
             io::stdout().flush().unwrap();
             let mut input = String::new();
@@ -45,48 +54,23 @@ fn ensure_gh_installed() -> Result<(), String> {
                 let os = env::consts::OS;
                 match os {
                     "macos" => {
-                        // Use brew on macOS
                         Command::new("brew").args(&["install", "gh"]).status()
                             .map_err(|e| format!("Failed to install GitHub CLI: {}", e))?;
                         Ok(())
-                    }
+                    },
                     "windows" => {
-                        // Check for Chocolatey
-                        if Command::new("choco").arg("--version").output().is_ok() {
-                            info!("Found Chocolatey! Installing GitHub CLI...");
-                            let status = Command::new("powershell")
-                                .args(&[
-                                    "-Command",
-                                    "Start-Process",
-                                    "choco",
-                                    "-ArgumentList",
-                                    "'install', 'gh', '-y'",
-                                    "-Verb",
-                                    "RunAs"
-                                ])
-                                .status()
-                                .map_err(|e| format!("Failed to launch Chocolatey with elevated privileges: {}", e))?;
+                        let output = Command::new("winget")
+                            .args(&["install", "--id", "GitHub.cli"])
+                            .output()
+                            .map_err(|e| format!("Failed to launch winget: {}", e))?;
 
-                            return if status.success() {
-                                Ok(())
-                            } else {
-                                Err("Failed to install GitHub CLI using Chocolatey with elevated privileges.".to_string())
-                            }
+                        let output_str = String::from_utf8_lossy(&output.stderr);
+                        if output.status.success() || output_str.contains("No newer package versions are available") {
+                            Ok(())
+                        } else {
+                            Err("Failed to install GitHub CLI using winget.".to_string())
                         }
-
-                        // If Chocolatey is not found, download the executable
-                        // Determine the path to the Downloads folder
-                        let downloads_folder = dirs::download_dir().ok_or("Unable to determine the Downloads folder path.".to_string())?;
-                        let installer_path = downloads_folder.join("gh_installer.msi");
-
-                        Command::new("powershell")
-                            .args(&["-Command", "Invoke-WebRequest", "-Uri", "https://github.com/cli/cli/releases/download/v2.0.0/gh_2.0.0_windows_amd64.msi", "-OutFile", &installer_path.to_string_lossy()])
-                            .status()
-                            .map_err(|e| format!("Failed to download GitHub CLI installer: {}", e))?;
-
-                        info!("Installer downloaded to '{}'. Please install it manually.", installer_path.to_string_lossy());
-                        Err("Please install the GitHub CLI using the downloaded 'gh_installer.msi' and rerun the program.".to_string())
-                    }
+                    },
                     _ => Err("Unsupported operating system.".to_string())
                 }
             } else {
@@ -99,23 +83,39 @@ fn ensure_gh_installed() -> Result<(), String> {
 
 /// Check if the user is authenticated with GitHub.
 fn check_gh_authenticated() -> Result<(), String> {
-    // Check if GITHUB_TOKEN is set
-    if env::var("GITHUB_TOKEN").is_ok() {
-        info!("Clearing the GITHUB_TOKEN environment variable...");
-        env::remove_var("GITHUB_TOKEN");
-    }
-
     match run_command("gh", &["auth", "status"]) {
-        Ok(_) => Ok(()),
+        Ok(_) => {
+            info!("You are already authenticated with GitHub. ✅");
+            Ok(())
+        }
         Err(_) => {
             info!("You are not logged in to GitHub via 'gh' CLI.");
-            info!("Please follow the on-screen instructions to authenticate.");
-            run_command("gh", &["auth", "login"]).map(|_| ())
+            info!("Attempting automated authentication with predefined choices.");
+
+            let status = Command::new("gh")
+                .args(&[
+                    "auth",
+                    "login",
+                    "-p",
+                    "https",
+                    "-w",  // To open a web browser for authentication
+                ])
+                .status()
+                .expect("Failed to execute 'gh auth login'");
+
+            if status.success() {
+                // Set the git protocol to HTTPS
+                Command::new("gh")
+                    .args(&["config", "set", "-h", "github.com", "git_protocol", "https"])
+                    .status()
+                    .expect("Failed to set git protocol to HTTPS");
+                Ok(())
+            } else {
+                Err("Automated authentication failed.".to_string())
+            }
         }
     }
 }
-
-
 
 
 /// Validate repository name against GitHub rules.
@@ -130,8 +130,8 @@ fn get_repo_details() -> (String, String) {
     let mut repo_visibility = String::new();
 
     loop {
-        print!("Enter the name for the new GitHub repository: ");  // Changed info! to print!
-        io::stdout().flush().unwrap();  // Flush stdout to display the prompt before input
+        print!("New GitHub repo name?: ");
+        io::stdout().flush().unwrap();
         io::stdin().read_line(&mut repo_name).expect("Failed to read line");
         repo_name = repo_name.trim().to_string();
 
@@ -144,21 +144,29 @@ fn get_repo_details() -> (String, String) {
     }
 
     loop {
-        print!("Should the repository be public or private? (public/private): ");  // Changed info! to print!
-        io::stdout().flush().unwrap();  // Flush stdout to display the prompt before input
+        print!("Should the repository be public or private? Type 'p' for public, 'pr' for private [Default: public]: ");
+        io::stdout().flush().unwrap();
         io::stdin().read_line(&mut repo_visibility).expect("Failed to read line");
         repo_visibility = repo_visibility.trim().to_string();
 
-        if ["public", "private"].contains(&repo_visibility.as_str()) {
+        // Default to "public" if nothing or just "p" is entered
+        if repo_visibility.is_empty() || repo_visibility == "p" {
+            repo_visibility = "public".to_string();
+            break;
+        }
+        // Accept "pr" or "private" for private repositories
+        else if repo_visibility == "private" || repo_visibility == "pr" {
+            repo_visibility = "private".to_string();
             break;
         } else {
-            warn!("Invalid option. Please choose 'public' or 'private'.");
+            warn!("Invalid option. Type 'p' for public or 'pr' for private.");
             repo_visibility.clear();
         }
     }
 
     (repo_name, repo_visibility)
 }
+
 
 /// Create a new GitHub repository.
 fn create_github_repo(repo_name: &str, repo_visibility: &str) -> Result<String, String> {
@@ -177,19 +185,32 @@ fn create_github_repo(repo_name: &str, repo_visibility: &str) -> Result<String, 
 
 /// Initialize git and set remote URL.
 fn handle_git_remote(new_github_url: &str) -> Result<String, String> {
-    run_command("git", &["init"])?;
+    // Prompt user about setting git remotes
+    print!("Do you want to set the git remotes for the repository? This will link the local repository with the remote GitHub repository. (y/n): ");
+    io::stdout().flush().unwrap();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).expect("Failed to read line");
+    let input = input.trim().to_lowercase();
 
-    match run_command("git", &["remote"]) {
-        Ok(output) => {
-            if output.contains("origin") {
-                run_command("git", &["remote", "set-url", "origin", new_github_url])
-            } else {
-                run_command("git", &["remote", "add", "origin", new_github_url])
+    if input == "y" || input == "yes" {
+        run_command("git", &["init"])?;
+
+        match run_command("git", &["remote"]) {
+            Ok(output) => {
+                if output.contains("origin") {
+                    run_command("git", &["remote", "set-url", "origin", new_github_url])
+                } else {
+                    run_command("git", &["remote", "add", "origin", new_github_url])
+                }
             }
+            Err(err) => Err(format!("Could not set git remote: {}", err))
         }
-        Err(err) => Err(format!("Could not set git remote: {}", err))
+    } else {
+        info!("Skipped setting git remotes.");
+        Ok("Skipped".to_string())
     }
 }
+
 
 /// Create LICENSE and README.md files.
 fn create_license_and_readme(repo_name: &str) -> Result<(), io::Error> {
@@ -201,36 +222,26 @@ fn create_license_and_readme(repo_name: &str) -> Result<(), io::Error> {
     Ok(())
 }
 
-fn write_info_in_green(text: &str) -> io::Result<()> {
-    let mut stdout = StandardStream::stdout(ColorChoice::Always);
-    stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
-    writeln!(&mut stdout, "{}", text)
-}
-
 fn main() {
+    // Print the introductory message
+    print_intro();
+
+    // Initialize the logger
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .format(|buf, record| {
-            match record.level() {
-                log::Level::Info => write_info_in_green(&format!("{}", record.args())),
-                _ => writeln!(buf, "{}", record.args())
-            }
+            writeln!(buf, "{}", record.args())
         })
         .init();
 
-    // Ensure GitHub CLI is installed before proceeding
+    // Ensure GitHub CLI is installed
     if let Err(err) = ensure_gh_installed() {
-        error!("Error: {}", err);
+        error!("GitHub CLI Error: {}", err);
         std::process::exit(1);
     }
 
-    // Check if 'gh' is available after downloading the installer
-    if Command::new("gh").arg("--version").output().is_err() {
-        info!("Please install the GitHub CLI using the downloaded 'gh_installer.msi' and rerun the program.");
-        std::process::exit(0); // Exit without error
-    }
-
+    // Authentication
     if let Err(err) = check_gh_authenticated() {
-        error!("Error: {}", err);
+        error!("Authentication Error: {}", err);
         std::process::exit(1);
     }
 
