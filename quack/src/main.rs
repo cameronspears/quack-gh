@@ -2,7 +2,6 @@ extern crate env_logger;
 extern crate log;
 
 use std::{env, io};
-use std::fs::File;
 use std::io::Write;
 use std::process::Command;
 
@@ -212,17 +211,6 @@ fn handle_git_remote(new_github_url: &str) -> Result<String, String> {
     }
 }
 
-
-/// Create LICENSE and README.md files.
-fn create_license_and_readme(repo_name: &str) -> Result<(), io::Error> {
-    let mut file = File::create("README.md")?;
-    writeln!(file, "# {}", repo_name)?;
-
-    let mut file = File::create("LICENSE")?;
-    file.write_all(b"GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n")?;
-    Ok(())
-}
-
 fn main() {
     // Print the introductory message
     print_intro();
@@ -250,17 +238,20 @@ fn main() {
 
     match create_github_repo(&repo_name, &repo_visibility) {
         Ok(github_url) => {
-            if let Err(err) = handle_git_remote(&github_url) {
-                error!("Error: {}", err);
-                std::process::exit(1);
+            let git_remote_result = handle_git_remote(&github_url);
+            match git_remote_result {
+                Ok(msg) => {
+                    if msg == "Skipped" {
+                        info!("GitHub repository created.");
+                    } else {
+                        info!("GitHub repository created and linked. You can now manually add, commit, and push files.");
+                    }
+                }
+                Err(err) => {
+                    error!("Error: {}", err);
+                    std::process::exit(1);
+                }
             }
-
-            if let Err(err) = create_license_and_readme(&repo_name) {
-                error!("Failed to create LICENSE and README.md files: {}", err);
-                std::process::exit(1);
-            }
-
-            info!("GitHub repository initialized and linked. You can now manually add, commit, and push files.");
         }
         Err(err) => {
             error!("Error: {}", err);
