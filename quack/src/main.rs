@@ -10,7 +10,7 @@ use regex::Regex;
 
 /// Print an introductory message describing the program.
 fn print_intro() {
-    println!("🦆 Welcome to Quack! 🦆");
+    println!("\n🦆 Welcome to Quack! 🦆");
     println!("Making your GitHub life easier by:");
     println!("\n  - Ensuring GitHub CLI is installed");
     println!("  - Authenticating you with GitHub");

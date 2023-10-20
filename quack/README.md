@@ -16,7 +16,7 @@ Quack is a command-line tool designed to streamline your GitHub experience. It a
 Install Quack via Cargo:
 
 ```
-cargo install quack
+cargo install quack-gh
 ```
 
 ## Usage
