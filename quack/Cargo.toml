@@ -1,6 +1,6 @@
 [package]
 name = "quack-gh"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A super easy way to create new GitHub repos and link them to your local repo."
 license-file = "LICENSE.txt"
