@@ -29,3 +29,6 @@ quack
 
 Follow the interactive prompts to automate your GitHub workflow.
 
+<img width="682" alt="Screenshot 2023-10-20 at 11 02 55 AM" src="https://github.com/cameronspears/quack-gh/assets/25994477/eaf955b6-3985-434e-9762-e851836b5731">
+
+
